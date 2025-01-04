@@ -6,3 +6,9 @@ include.workspace = true
 edition.workspace = true
 
 [dependencies]
+datafusion = "44.0.0"
+tokio = { version = "1", features = ["full"] }
+ndarray = "0.16.1"
+anyhow = { version = "*"}
+ndarray-rand = "0.15.0"
+rand = "0.8.5"
