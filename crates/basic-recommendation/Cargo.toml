@@ -1,0 +1,10 @@
+[package]
+name = "basic-recommendation"
+version = "0.1.0"
+rust-version.workspace = true
+include.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde_json = {workspace = true}
+serde = {workspace = true}
