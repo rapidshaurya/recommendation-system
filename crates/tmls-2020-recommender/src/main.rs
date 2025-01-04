@@ -1,9 +1,7 @@
 use anyhow::Result;
 use datafusion::prelude::*;
 use tmls_2020_recommender::{
-    matrix_factor::{
-        compute_rmse, highest_rated_films, matrix_factorization, most_frequently_rated_films,
-    },
+    matrix_factor::{compute_rmse, matrix_factorization},
     user_item_matrix::create_user_item_matrix,
 };
 #[tokio::main]
@@ -23,6 +21,5 @@ async fn main() -> Result<()> {
     // let rmse = compute_rmse(&matrix.view(), &predictions.view()); // Use .view() to pass views
     // println!("RMSE: {:.4}", rmse);
 
-    let a = most_frequently_rated_films(&matrix, 10);
     Ok(())
 }

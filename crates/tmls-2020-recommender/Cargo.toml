@@ -12,3 +12,14 @@ ndarray = "0.16.1"
 anyhow = { version = "*"}
 ndarray-rand = "0.15.0"
 rand = "0.8.5"
+diesel = { version = "2.0.4", features = [
+    "postgres",
+    "r2d2",
+    "chrono",
+    "uuid",
+    "numeric",
+    "64-column-tables",
+    "serde_json",
+] }
+
+dotenvy = "*"
