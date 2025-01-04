@@ -1,0 +1,8 @@
+[package]
+name = "tmls-2020-recommender"
+version = "0.1.0"
+rust-version.workspace = true
+include.workspace = true
+edition.workspace = true
+
+[dependencies]

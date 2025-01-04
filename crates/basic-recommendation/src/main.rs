@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-static DATA: &'static str = include_str!("../data.json");
+static DATA: &'static str = include_str!("../../../data.json");
 
 #[derive(Clone, serde::Deserialize)]
 struct Document {
