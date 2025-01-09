@@ -1,25 +1,35 @@
 use anyhow::Result;
-use datafusion::prelude::*;
-use tmls_2020_recommender::{
-    matrix_factor::{compute_rmse, matrix_factorization},
-    user_item_matrix::create_user_item_matrix,
-};
+
+use nalgebra::DVector;
+use tmls_2020_recommender::prelude::*;
 #[tokio::main]
 async fn main() -> Result<()> {
-    let ctx = SessionContext::new();
-    ctx.register_csv("ratings", "ratings.csv", CsvReadOptions::new())
-        .await?;
+    let pool = create_test_pool(1);
+    let mut conn = pool.get().unwrap();
 
-    // Load data and create user-item matrix
-    let matrix = create_user_item_matrix(&ctx).await?;
+    // Create the user-item matrix
+    let matrix = create_user_item_matrix(&mut conn).unwrap();
 
-    // // Perform matrix factorization
-    // let (user_features, item_features) = matrix_factorization(&matrix, 10);
+    // Print matrix dimensions
+    dbg!(matrix.ncols(), matrix.nrows());
 
-    // // Generate predictions and evaluate
-    // let predictions = user_features.dot(&item_features);
-    // let rmse = compute_rmse(&matrix.view(), &predictions.view()); // Use .view() to pass views
-    // println!("RMSE: {:.4}", rmse);
+    // Compute item-item similarity matrix
+    let similarity_matrix = compute_item_item_similarity(&matrix);
+
+    // Find the top-10 nearest neighbors for each item
+    let neighbors = find_k_nearest_neighbors(&similarity_matrix, 10);
+    if let Some(sim) = neighbors.get(&1) {
+        for movie in sim {
+            println!("Movie ID: {}, Similarity: {}", movie.0, movie.1);
+        }
+    }
+
+    // Recommend items for user 0
+    let user_ratings = DVector::from_vec(matrix.row(1).iter().copied().collect());
+
+    let recommendations = recommend_items_for_user(&user_ratings, &neighbors);
+
+    println!("Recommendations for user {}: {:?}", 0, recommendations);
 
     Ok(())
 }

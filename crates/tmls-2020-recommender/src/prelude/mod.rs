@@ -4,7 +4,7 @@ use diesel::{
 };
 
 pub mod user_rating_matrix;
-
+pub use user_rating_matrix::*;
 pub type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
 pub fn create_test_pool(size: u32) -> DbPool {
