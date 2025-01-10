@@ -3,7 +3,7 @@ use diesel::*;
 use nalgebra::{DMatrix, DVector};
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
-
+use std::hash::Hash;
 #[derive(Debug, Queryable, Selectable)]
 #[diesel(table_name = crate::schema::ratings)]
 pub struct UserMovieRating {
@@ -11,9 +11,46 @@ pub struct UserMovieRating {
     pub movie_id: i64,
     pub rating: Option<f64>,
 }
+#[derive(Debug, Default)]
+pub struct Mapper<T> {
+    pub user_mapper: HashMap<T, i64>,
+    pub movie_mapper: HashMap<T, i64>,
+    pub user_reverse_mapper: HashMap<i64, T>,
+    pub movie_reverse_mapper: HashMap<i64, T>,
+}
+
+impl<T: Eq + Hash + Clone> Mapper<T> {
+    pub fn push_user_map(&mut self, index: i64, user_id: T) {
+        self.user_mapper.insert(user_id.clone(), index);
+        self.user_reverse_mapper.insert(index, user_id);
+    }
+
+    pub fn push_movie_map(&mut self, index: i64, movie_id: T) {
+        self.movie_mapper.insert(movie_id.clone(), index);
+        self.movie_reverse_mapper.insert(index, movie_id);
+    }
+
+    pub fn get_user_index(&self, user_id: T) -> Option<usize> {
+        self.user_mapper.get(&user_id).map(|d| *d as usize)
+    }
+
+    pub fn get_movie_index(&self, movie_id: T) -> Option<usize> {
+        self.movie_mapper.get(&movie_id).map(|d| *d as usize)
+    }
+
+    pub fn get_user_id_by_index(&self, index: i64) -> Option<&T> {
+        self.user_reverse_mapper.get(&index)
+    }
+
+    pub fn get_movie_id_by_index(&self, index: i64) -> Option<&T> {
+        self.movie_reverse_mapper.get(&index)
+    }
+}
 
 /// Create a user-item rating matrix from the database
-pub fn create_user_item_matrix(conn: &mut pg::PgConnection) -> anyhow::Result<DMatrix<f64>> {
+pub fn create_user_item_matrix(
+    conn: &mut pg::PgConnection,
+) -> anyhow::Result<(DMatrix<f64>, Mapper<i64>)> {
     use crate::schema::ratings;
 
     // Fetch all ratings from the database
@@ -21,6 +58,22 @@ pub fn create_user_item_matrix(conn: &mut pg::PgConnection) -> anyhow::Result<DM
         .select(UserMovieRating::as_select())
         .get_results(conn)
         .context("Failed to fetch user ratings from database")?;
+    let distinct_user: Vec<i64> = ratings::table
+        .select(ratings::user_id)
+        .group_by(ratings::user_id)
+        .get_results(conn)?;
+    let distinct_movie: Vec<i64> = ratings::table
+        .select(ratings::movie_id)
+        .group_by(ratings::movie_id)
+        .get_results(conn)?;
+    let mut mapper: Mapper<i64> = Mapper::default();
+    for (index, user_id) in distinct_user.iter().enumerate() {
+        mapper.push_user_map(index as i64, *user_id);
+    }
+    for (index, movie_id) in distinct_movie.iter().enumerate() {
+        mapper.push_movie_map(index as i64, *movie_id);
+    }
+
     let mut unique_movies: HashSet<i64> = HashSet::new();
     // Build a nested hash map of user_id -> movie_id -> rating
     let mut ratings_map: HashMap<i64, HashMap<i64, f64>> = HashMap::new();
@@ -36,15 +89,18 @@ pub fn create_user_item_matrix(conn: &mut pg::PgConnection) -> anyhow::Result<DM
     // Create and populate the matrix
     let num_users = ratings_map.len();
     let mut matrix = DMatrix::zeros(num_users, num_movies);
-    for (user_index, (_, movie_ratings)) in ratings_map.into_iter().enumerate() {
+    for (user_id, movie_ratings) in ratings_map.into_iter() {
         for (movie_id, rating) in movie_ratings {
             if (movie_id as usize) < num_movies {
-                matrix[(user_index, movie_id as usize - 1)] = rating;
+                matrix[(
+                    mapper.get_user_index(user_id).unwrap_or_default(),
+                    mapper.get_movie_index(movie_id).unwrap_or_default(),
+                )] = rating;
             }
         }
     }
 
-    Ok(matrix)
+    Ok((matrix, mapper))
 }
 
 /// Find the top N most frequently rated films
@@ -206,7 +262,7 @@ mod test {
     fn test_user_matrix() {
         let pool = create_test_pool(1);
         let mut conn = pool.get().unwrap();
-        let matrix = create_user_item_matrix(&mut conn).unwrap();
+        let (matrix, mapper) = create_user_item_matrix(&mut conn).unwrap();
 
         println!("Top 10 Most Frequently Rated Films:");
         for (film_id, count) in most_frequently_rated_films(&matrix, 10) {
